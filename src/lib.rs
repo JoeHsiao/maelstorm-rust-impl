@@ -1,4 +1,6 @@
+use std::collections::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Message {
     pub src: String,
@@ -31,8 +33,29 @@ pub enum Body {
         msg_id: u64,
     },
     GenerateOk {
-        msg_id: u64,
         in_reply_to: u64,
         id: String
+    },
+    Topology {
+        msg_id: u64,
+        topology: HashMap<String, Vec<String>>
+    },
+    TopologyOk {
+        in_reply_to: u64,
+    },
+    Broadcast {
+        msg_id: u64,
+        message: serde_json::Value
+    },
+    BroadcastOk {
+        in_reply_to: u64,
+    },
+    Read {
+        msg_id: u64,
+    },
+    ReadOk {
+        in_reply_to: u64,
+        messages: HashSet<serde_json::Value>
     }
+
 }
