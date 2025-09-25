@@ -27,4 +27,12 @@ pub enum Body {
     InitOk {
         in_reply_to: u64,
     },
+    Generate {
+        msg_id: u64,
+    },
+    GenerateOk {
+        msg_id: u64,
+        in_reply_to: u64,
+        id: String
+    }
 }
