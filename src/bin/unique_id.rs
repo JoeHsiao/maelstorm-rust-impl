@@ -1,71 +1,32 @@
-use anyhow::{Result, bail};
-use std::io::BufRead;
-use maelstrom_rust_impl::{Message, Body};
-struct GUIDGenerator {
-    node_id: String,
-    incr_id: u64,
-}
-
-impl GUIDGenerator {
-    fn init(req: &Message) -> Result<(Self, Message)> {
-        match &req.body {
-            Body::Init {
-                msg_id,
-                node_id,
-                node_ids: _,
-            } => {
-                let echoer = GUIDGenerator {
-                    node_id: node_id.clone(),
-                    incr_id: 0,
-                };
-                Ok((
-                    echoer,
-                    Message {
-                        src: node_id.clone(),
-                        dst: req.src.clone(),
-                        body: Body::InitOk {
-                            in_reply_to: *msg_id,
-                        },
-                    },
-                ))
-            }
-            _ => bail!("Cannot init Echoer because there was no init message!"),
-        }
-    }
-    fn generate(&mut self, req: &Message) -> Result<Message> {
-        match &req.body {
-            Body::Generate { msg_id } => {
-                let msg = Message {
-                    src: self.node_id.clone(),
-                    dst: req.src.clone(),
-                    body: Body::GenerateOk {
-                        in_reply_to: *msg_id,
-                        id: format!("{}{}", self.node_id, self.incr_id.to_string()),
-                    },
-                };
-                self.incr_id += 1;
-                Ok(msg)
-            }
-            _ => bail!("Received a request with unknown type!"),
-        }
-    }
-}
+use std::collections::HashMap;
+use anyhow::Result;
+use maelstrom_rust_impl::{Message, Body, MaelstromNode, MaelstromNodeId, MaelstromNodeActions};
+#[derive(Default)]
+struct Empty {}
+type GUIDGenerator = MaelstromNode<Empty>;
 
 fn main() -> Result<()> {
-    let mut stdin = std::io::stdin().lock();
-    let mut buffer = String::new();
-    stdin
-        .read_line(&mut buffer)
-        .expect("Failed reading init message");
-    let init_msg: Message = serde_json::from_str(&buffer)?;
-    let (mut echoer, init_ok) = GUIDGenerator::init(&init_msg)?;
-    println!("{}", serde_json::to_string(&init_ok)?);
+    let mut id_generator = GUIDGenerator {
+        node_id: MaelstromNodeId::Unassigned,
+        next_res_id: 0,
+        msg_handlers: HashMap::new(),
+        extra_data: Empty{},
+    };
 
-    for line in stdin.lines() {
-        let line = line?;
-        let req: Message = serde_json::from_str(&line)?;
-        let res = echoer.generate(&req)?;
-        println!("{}", serde_json::to_string(&res)?);
-    }
+    id_generator.handle("generate", |node, msg| {
+        if let Body::Generate { msg_id } = msg.body {
+            Some(Ok(Message {
+                src: node.node_id.as_str().unwrap(),
+                dst: msg.src,
+                body: Body::GenerateOk {
+                    in_reply_to: msg_id,
+                    id: format!("{}_{}", node.node_id.as_str().unwrap(), node.next_res_id)
+                },
+            }))
+        } else {
+            None
+        }
+    });
+    id_generator.run()?;
     Ok(())
 }
