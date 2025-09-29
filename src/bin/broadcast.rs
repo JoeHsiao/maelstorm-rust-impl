@@ -1,7 +1,6 @@
-use anyhow::{Result, anyhow, bail};
+use anyhow::{Result};
 use maelstrom_rust_impl::{Body, MaelstromNode, MaelstromNodeActions, MaelstromNodeId, Message};
 use std::collections::{HashMap, HashSet};
-use std::io::BufRead;
 
 #[derive(Default)]
 struct ExtraData {

@@ -135,7 +135,7 @@ impl<Extra: Default> MaelstromNodeActions<Extra> for MaelstromNode<Extra> {
     fn send(&mut self, msg: Message) -> Result<()> {
         println!("{}", serde_json::to_string(&msg)?);
         self.next_res_id += 1;
-        Ok((()))
+        Ok(())
     }
 
     fn run(&mut self) -> Result<()> {
