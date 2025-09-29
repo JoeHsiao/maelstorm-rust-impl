@@ -1,4 +1,4 @@
-use anyhow::{Result};
+use anyhow::Result;
 use maelstrom_rust_impl::{Body, MaelstromNode, MaelstromNodeActions, MaelstromNodeId, Message};
 use std::collections::{HashMap, HashSet};
 
@@ -13,7 +13,7 @@ type Broadcaster = MaelstromNode<ExtraData>;
 fn main() -> Result<()> {
     let mut broadcaster = Broadcaster {
         node_id: MaelstromNodeId::Unassigned,
-        next_res_id: 0,
+        next_send_id: 0,
         msg_handlers: HashMap::new(),
         extra_data: ExtraData {
             topology: HashMap::new(),
@@ -23,15 +23,41 @@ fn main() -> Result<()> {
 
     broadcaster.handle("broadcast", |node, msg: Message| {
         if let Body::Broadcast { msg_id, message } = msg.body {
+            let node_id = node.node_id.as_str().expect("node id is not assigned");
+
+            // Propagate the broadcast message to neighbors, excluding the sender
+            node.extra_data
+                .topology
+                .get(&node_id)
+                .expect("Cannot find node id in topology")
+                .iter()
+                .filter(|neighbor| **neighbor != msg.src)
+                .cloned()
+                .collect::<Vec<String>>()
+                .iter()
+                .for_each(|neighbor| {
+                    let broadcast_msg = Message {
+                        src: node_id.clone(),
+                        dst: neighbor.into(),
+                        body: Body::Broadcast {
+                            msg_id: node.next_send_id,
+                            message: message.clone(),
+                        },
+                    };
+                    let _ = node.send(broadcast_msg);
+                });
+
             node.extra_data.seen_messages.insert(message);
             Some(Ok(Message {
-                src: node.node_id.as_str().expect("node id is not assigned"),
+                src: node_id.clone(),
                 dst: msg.src,
                 body: Body::BroadcastOk {
                     in_reply_to: msg_id,
                 },
             }))
-        } else { None }
+        } else {
+            None
+        }
     });
 
     broadcaster.handle("topology", |node, msg: Message| {
@@ -44,21 +70,25 @@ fn main() -> Result<()> {
                     in_reply_to: msg_id,
                 },
             }))
-        } else { None }
+        } else {
+            None
+        }
     });
     broadcaster.handle("read", |node, msg: Message| {
-        if let Body::Read { msg_id} = msg.body {
+        if let Body::Read { msg_id } = msg.body {
             Some(Ok(Message {
                 src: node.node_id.as_str().expect("node id is not assigned"),
                 dst: msg.src,
                 body: Body::ReadOk {
                     in_reply_to: msg_id,
-                    messages: node.extra_data.seen_messages.clone()
+                    messages: node.extra_data.seen_messages.clone(),
                 },
             }))
-        } else { None }
+        } else {
+            None
+        }
     });
-    
+
     broadcaster.run()?;
     Ok(())
 }

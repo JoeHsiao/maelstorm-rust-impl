@@ -9,7 +9,7 @@ type Echoer = MaelstromNode<Empty>;
 fn main() -> Result<()> {
     let mut echoer = Echoer {
         node_id: MaelstromNodeId::Unassigned,
-        next_res_id: 0,
+        next_send_id: 0,
         msg_handlers: HashMap::new(),
         extra_data: Empty,
     };
@@ -20,7 +20,7 @@ fn main() -> Result<()> {
                 src: node.node_id.as_str().unwrap(),
                 dst: msg.src,
                 body: Body::EchoOk {
-                    msg_id: node.next_res_id,
+                    msg_id: node.next_send_id,
                     in_reply_to: msg_id,
                     echo: echo.clone(),
                 },

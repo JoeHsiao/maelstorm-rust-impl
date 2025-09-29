@@ -100,7 +100,7 @@ impl MaelstromNodeId {
 }
 pub struct MaelstromNode<Extra> {
     pub node_id: MaelstromNodeId,
-    pub next_res_id: u64,
+    pub next_send_id: u64,
     pub msg_handlers: HashMap<&'static str, Rc<dyn Fn(&mut Self, Message) -> Option<Result<Message>>>>,
     pub extra_data: Extra
 }
@@ -125,16 +125,14 @@ impl<Extra: Default> MaelstromNodeActions<Extra> for MaelstromNode<Extra> {
 
     fn process_msg(&mut self, msg: Message) -> Option<Result<Message>> {
         let name = msg.body.as_str();
-        let handler = self.msg_handlers
-            .get(name)
-            .expect("No action defined for message type {name}")
-            .clone();
-        let res = handler(self, msg);
-        res
+        match self.msg_handlers.get(name) {
+            Some(handler) => handler.clone()(self, msg),
+            None => None
+        }
     }
     fn send(&mut self, msg: Message) -> Result<()> {
         println!("{}", serde_json::to_string(&msg)?);
-        self.next_res_id += 1;
+        self.next_send_id += 1;
         Ok(())
     }
 
@@ -154,22 +152,13 @@ impl<Extra: Default> MaelstromNodeActions<Extra> for MaelstromNode<Extra> {
             else { None }
         });
 
-        let mut stdin = std::io::stdin().lock();
-        let mut buffer = String::new();
-        stdin
-            .read_line(&mut buffer)
-            .expect("Failed reading init message");
-        let init_msg: Message = serde_json::from_str(&buffer)?;
-
-        let response = self.process_msg(init_msg);
-        let response = response.unwrap()?;
-        self.send(response)?;
-
+        let stdin = std::io::stdin().lock();
         for line in stdin.lines() {
             let line = line?;
             let req: Message = serde_json::from_str(&line)?;
-            let response = self.process_msg(req).unwrap()?;
-            self.send(response)?;
+            if let Some(response) =self.process_msg(req) {
+                self.send(response.unwrap())?;
+            }
         }
         Ok(())
     }

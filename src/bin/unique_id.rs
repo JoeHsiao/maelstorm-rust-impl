@@ -8,7 +8,7 @@ type GUIDGenerator = MaelstromNode<Empty>;
 fn main() -> Result<()> {
     let mut id_generator = GUIDGenerator {
         node_id: MaelstromNodeId::Unassigned,
-        next_res_id: 0,
+        next_send_id: 0,
         msg_handlers: HashMap::new(),
         extra_data: Empty{},
     };
@@ -20,7 +20,7 @@ fn main() -> Result<()> {
                 dst: msg.src,
                 body: Body::GenerateOk {
                     in_reply_to: msg_id,
-                    id: format!("{}_{}", node.node_id.as_str().unwrap(), node.next_res_id)
+                    id: format!("{}_{}", node.node_id.as_str().unwrap(), node.next_send_id)
                 },
             }))
         } else {
