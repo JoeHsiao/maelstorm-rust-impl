@@ -111,6 +111,7 @@ pub trait MaelstromNodeActions<Extra: Default>
     where
         F: Fn(&mut Self, Message) -> Option<Result<Message>> + 'static;
     fn process_msg(&mut self, msg: Message) -> Option<Result<Message>>;
+    fn send(&mut self, msg:Message) -> Result<()>;
     fn run(&mut self) -> Result<()>;
 }
 
@@ -129,9 +130,14 @@ impl<Extra: Default> MaelstromNodeActions<Extra> for MaelstromNode<Extra> {
             .expect("No action defined for message type {name}")
             .clone();
         let res = handler(self, msg);
-        self.next_res_id += 1;
         res
     }
+    fn send(&mut self, msg: Message) -> Result<()> {
+        println!("{}", serde_json::to_string(&msg)?);
+        self.next_res_id += 1;
+        Ok((()))
+    }
+
     fn run(&mut self) -> Result<()> {
         self.handle("init", |node: &mut MaelstromNode<Extra>, msg: Message| -> Option<Result<Message>> {
             if let Body::Init { node_id, msg_id, .. } = msg.body
@@ -157,13 +163,13 @@ impl<Extra: Default> MaelstromNodeActions<Extra> for MaelstromNode<Extra> {
 
         let response = self.process_msg(init_msg);
         let response = response.unwrap()?;
-        println!("{}", serde_json::to_string(&response)?);
+        self.send(response)?;
 
         for line in stdin.lines() {
             let line = line?;
             let req: Message = serde_json::from_str(&line)?;
             let response = self.process_msg(req).unwrap()?;
-            println!("{}", serde_json::to_string(&response)?);
+            self.send(response)?;
         }
         Ok(())
     }
