@@ -10,23 +10,16 @@ struct ExtraData {
 
 type Broadcaster = MaelstromNode<ExtraData>;
 
-fn main() -> Result<()> {
-    let mut broadcaster = Broadcaster {
-        node_id: MaelstromNodeId::Unassigned,
-        next_send_id: 0,
-        msg_handlers: HashMap::new(),
-        extra_data: ExtraData {
-            topology: HashMap::new(),
-            seen_messages: HashSet::new(),
-        },
-    };
+trait BroadcasterActions {
+    fn broadcast_to_neighbors(&mut self, msg: Message);
+}
 
-    broadcaster.handle("broadcast", |node, msg: Message| {
-        if let Body::Broadcast { msg_id, message } = msg.body {
-            let node_id = node.node_id.as_str().expect("node id is not assigned");
+impl BroadcasterActions for Broadcaster {
+    fn broadcast_to_neighbors(&mut self, msg: Message) {
+        if let Body::Broadcast { message, .. } = msg.body {
+            let node_id = self.node_id.as_str().expect("node id is not assigned");
 
-            // Propagate the broadcast message to neighbors, excluding the sender
-            node.extra_data
+            self.extra_data
                 .topology
                 .get(&node_id)
                 .expect("Cannot find node id in topology")
@@ -40,12 +33,31 @@ fn main() -> Result<()> {
                         src: node_id.clone(),
                         dst: neighbor.into(),
                         body: Body::Broadcast {
-                            msg_id: node.next_send_id,
+                            msg_id: self.next_send_id,
                             message: message.clone(),
                         },
                     };
-                    let _ = node.send(broadcast_msg);
+                    let _ = self.send(broadcast_msg);
                 });
+        }
+    }
+}
+fn main() -> Result<()> {
+    let mut broadcaster = Broadcaster {
+        node_id: MaelstromNodeId::Unassigned,
+        next_send_id: 0,
+        msg_handlers: HashMap::new(),
+        extra_data: ExtraData {
+            topology: HashMap::new(),
+            seen_messages: HashSet::new(),
+        },
+    };
+
+    broadcaster.handle("broadcast", |node, msg: Message| {
+        if let Body::Broadcast { msg_id, message } = msg.clone().body {
+            let node_id = node.node_id.as_str().expect("node id is not assigned");
+
+            node.broadcast_to_neighbors(msg.clone());
 
             node.extra_data.seen_messages.insert(message);
             Some(Ok(Message {
