@@ -1,6 +1,9 @@
 use anyhow::Result;
 use maelstrom_rust_impl::{Body, MaelstromNode, MaelstromNodeActions, MaelstromNodeId, Message};
 use std::collections::{HashMap, HashSet};
+use std::thread;
+use std::thread::sleep;
+use std::time::Duration;
 
 #[derive(Default)]
 struct ExtraData {
@@ -16,7 +19,7 @@ trait BroadcasterActions {
 
 impl BroadcasterActions for Broadcaster {
     fn broadcast_to_neighbors(&mut self, msg: Message) {
-        if let Body::Broadcast { message, .. } = msg.body {
+        if let Body::ContinuousBroadcast { message, .. } = msg.body {
             let node_id = self.node_id.as_str().expect("node id is not assigned");
 
             self.extra_data
@@ -53,11 +56,30 @@ fn main() -> Result<()> {
         },
     };
 
+    broadcaster.handle("continuous_broadcast", |node, msg: Message| {
+        node.broadcast_to_neighbors(msg);
+        None
+    });
+
     broadcaster.handle("broadcast", |node, msg: Message| {
         if let Body::Broadcast { msg_id, message } = msg.clone().body {
             let node_id = node.node_id.as_str().expect("node id is not assigned");
 
-            node.broadcast_to_neighbors(msg.clone());
+            if !node.extra_data.seen_messages.contains(&message) {
+                thread::spawn({
+                    let mut msg = msg.clone();
+                    let message = message.clone();
+                    msg.body = Body::ContinuousBroadcast { message };
+                    move || {
+                        loop {
+                            sleep(Duration::from_millis(300));
+                            println!(
+                                "{}",
+                                serde_json::to_string(&msg).expect("message cannot be serialized")
+                            );
+                        }
+                    }});
+            }
 
             node.extra_data.seen_messages.insert(message);
             Some(Ok(Message {

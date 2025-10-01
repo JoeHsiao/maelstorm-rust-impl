@@ -1,4 +1,4 @@
-use anyhow::{Result};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::io::BufRead;
@@ -60,6 +60,9 @@ pub enum Body {
         in_reply_to: u64,
         messages: HashSet<serde_json::Value>,
     },
+    ContinuousBroadcast {
+        message: serde_json::Value,
+    },
 }
 
 impl Body {
@@ -76,7 +79,8 @@ impl Body {
             Body::Read { .. } => "read",
             Body::ReadOk { .. } => "read_ok",
             Body::Echo { .. } => "echo",
-            Body::EchoOk { .. } => "echo_ok"
+            Body::EchoOk { .. } => "echo_ok",
+            Body::ContinuousBroadcast { .. } => "continuous_broadcast",
         }
     }
 }
@@ -101,17 +105,17 @@ impl MaelstromNodeId {
 pub struct MaelstromNode<Extra> {
     pub node_id: MaelstromNodeId,
     pub next_send_id: u64,
-    pub msg_handlers: HashMap<&'static str, Rc<dyn Fn(&mut Self, Message) -> Option<Result<Message>>>>,
-    pub extra_data: Extra
+    pub msg_handlers:
+        HashMap<&'static str, Rc<dyn Fn(&mut Self, Message) -> Option<Result<Message>>>>,
+    pub extra_data: Extra,
 }
 
-pub trait MaelstromNodeActions<Extra: Default>
-{
+pub trait MaelstromNodeActions<Extra: Default> {
     fn handle<F>(&mut self, msg_type: &'static str, handler: F)
     where
         F: Fn(&mut Self, Message) -> Option<Result<Message>> + 'static;
     fn process_msg(&mut self, msg: Message) -> Option<Result<Message>>;
-    fn send(&mut self, msg:Message) -> Result<()>;
+    fn send(&mut self, msg: Message) -> Result<()>;
     fn run(&mut self) -> Result<()>;
 }
 
@@ -127,7 +131,7 @@ impl<Extra: Default> MaelstromNodeActions<Extra> for MaelstromNode<Extra> {
         let name = msg.body.as_str();
         match self.msg_handlers.get(name) {
             Some(handler) => handler.clone()(self, msg),
-            None => None
+            None => None,
         }
     }
     fn send(&mut self, msg: Message) -> Result<()> {
@@ -137,26 +141,32 @@ impl<Extra: Default> MaelstromNodeActions<Extra> for MaelstromNode<Extra> {
     }
 
     fn run(&mut self) -> Result<()> {
-        self.handle("init", |node: &mut MaelstromNode<Extra>, msg: Message| -> Option<Result<Message>> {
-            if let Body::Init { node_id, msg_id, .. } = msg.body
-            {
-                node.node_id = node_id.into();
-                Some(Ok(Message {
-                    src: node.node_id.as_str().expect("node id is not assigned"),
-                    dst: msg.src,
-                    body: Body::InitOk {
-                        in_reply_to: msg_id,
-                    },
-                }))
-            }
-            else { None }
-        });
+        self.handle(
+            "init",
+            |node: &mut MaelstromNode<Extra>, msg: Message| -> Option<Result<Message>> {
+                if let Body::Init {
+                    node_id, msg_id, ..
+                } = msg.body
+                {
+                    node.node_id = node_id.into();
+                    Some(Ok(Message {
+                        src: node.node_id.as_str().expect("node id is not assigned"),
+                        dst: msg.src,
+                        body: Body::InitOk {
+                            in_reply_to: msg_id,
+                        },
+                    }))
+                } else {
+                    None
+                }
+            },
+        );
 
         let stdin = std::io::stdin().lock();
         for line in stdin.lines() {
             let line = line?;
             let req: Message = serde_json::from_str(&line)?;
-            if let Some(response) =self.process_msg(req) {
+            if let Some(response) = self.process_msg(req) {
                 self.send(response.unwrap())?;
             }
         }
