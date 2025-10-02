@@ -1,5 +1,5 @@
 use anyhow::Result;
-use maelstrom_rust_impl::{Body, MaelstromNode, MaelstromNodeActions, MaelstromNodeId, Message};
+use maelstrom_rust_impl::{Body, Event, MaelstromNode, MaelstromNodeActions, MaelstromNodeId, Message};
 use std::collections::HashMap;
 
 #[derive(Default)]
@@ -14,21 +14,25 @@ fn main() -> Result<()> {
         extra_data: Empty,
     };
 
-    echoer.handle("echo", |node, msg| {
-        if let Body::Echo { msg_id, echo } = msg.body {
-            Some(Ok(Message {
-                src: node.node_id.as_str().unwrap(),
-                dst: msg.src,
-                body: Body::EchoOk {
-                    msg_id: node.next_send_id,
-                    in_reply_to: msg_id,
-                    echo: echo.clone(),
-                },
-            }))
-        } else {
-            None
+    echoer.handle("echo", |node, event| {
+        if let Event::Message(msg) = event {
+            if let Body::Echo { msg_id, echo } = msg.body {
+                return Some(Ok(Message {
+                    src: node.node_id.as_str().unwrap(),
+                    dst: msg.src,
+                    body: Body::EchoOk {
+                        msg_id: node.next_send_id,
+                        in_reply_to: msg_id,
+                        echo: echo.clone(),
+                    },
+                }));
+            } else {
+                return None;
+            }
         }
+        None
     });
-    echoer.run()?;
+    let (sender, receiver) = std::sync::mpsc::channel();
+    echoer.run(sender, receiver)?;
     Ok(())
 }
