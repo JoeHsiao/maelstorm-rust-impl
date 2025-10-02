@@ -60,8 +60,9 @@ pub enum Body {
         in_reply_to: u64,
         messages: HashSet<serde_json::Value>,
     },
-    ContinuousBroadcast {
-        message: serde_json::Value,
+    DoGossip,
+    Gossip {
+        message: HashSet<serde_json::Value>,
     },
 }
 
@@ -80,7 +81,8 @@ impl Body {
             Body::ReadOk { .. } => "read_ok",
             Body::Echo { .. } => "echo",
             Body::EchoOk { .. } => "echo_ok",
-            Body::ContinuousBroadcast { .. } => "continuous_broadcast",
+            Body::DoGossip {} => "do_gossip",
+            Body::Gossip { .. } => "gossip",
         }
     }
 }
