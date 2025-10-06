@@ -39,13 +39,19 @@ fn main() -> Result<()> {
     broadcaster.handle("do_gossip", |node, event: Event| {
         if let Event::Action(name) = event {
             if name == "do_gossip" {
-                let node_id = node.node_id.as_str().expect("node_id is not assigned");
+                let Some(node_id) = node.node_id.as_str() else {
+                    eprintln!("node_id is missing");
+                    return None;
+                };
                 let neighbors = node
                     .extra_data
                     .topology
                     .clone()
                     .remove(&node_id)
-                    .expect(&format!("topology missing entry for node id {}", node_id));
+                    .unwrap_or_else(|| {
+                        eprintln!("topology has no entry for node id {}", node_id);
+                        Vec::new()
+                    });
                 neighbors.iter().for_each(|n| {
                     let gossip = Message {
                         src: node_id.clone(),
@@ -121,7 +127,7 @@ fn main() -> Result<()> {
         let sender = sender.clone();
         move || -> Result<()> {
             loop {
-                sleep(Duration::from_millis(300));
+                sleep(Duration::from_millis(50));
                 sender
                     .send(Event::Action("do_gossip".into()))
                     .context("Cannot send do_gossip")?;
